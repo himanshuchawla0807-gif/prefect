@@ -365,6 +365,7 @@ def url_for(
     Returns the URL for a Prefect object.
 
     Pass in a supported object directly or provide an object name and ID.
+    Supply raw identifiers and names; URL path values are percent-encoded.
 
     Args:
         obj (Union[PrefectFuture, Block, Variable, Automation, Resource, ReceivedEvent, BaseModel, str]):
@@ -479,7 +480,8 @@ def url_for(
         # required attributes via hasattr and name check above
         event = cast(ReceivedEvent, obj)
         url = url_format.format(
-            occurred=event.occurred.strftime("%Y-%m-%d"), obj_id=obj_id
+            occurred=event.occurred.strftime("%Y-%m-%d"),
+            obj_id=urllib.parse.quote(str(obj_id), safe=""),
         )
     else:
         obj_keys = [
@@ -493,7 +495,13 @@ def url_for(
                 f"Unable to generate URL for {name} because the following keys are missing: {', '.join(obj_keys)}"
             )
 
-        url = url_format.format(obj_id=obj_id, **additional_format_kwargs)
+        url = url_format.format(
+            obj_id=urllib.parse.quote(str(obj_id), safe=""),
+            **{
+                key: urllib.parse.quote(str(additional_format_kwargs[key]), safe="")
+                for key in obj_keys
+            },
+        )
 
     if not base_url.endswith("/"):
         base_url += "/"

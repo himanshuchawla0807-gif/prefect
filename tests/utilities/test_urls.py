@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from prefect.blocks.webhook import Webhook
+from prefect.client.schemas.objects import WorkPool
 from prefect.events.schemas.automations import Automation, EventTrigger, Posture
 from prefect.events.schemas.events import ReceivedEvent, Resource
 from prefect.futures import PrefectConcurrentFuture, PrefectDistributedFuture
@@ -832,3 +833,40 @@ class TestSSRFProtectedAsyncBackendNonBlockingDNS:
         assert observed_threads[0] != loop_thread, (
             "getaddrinfo must run off the event loop thread"
         )
+
+
+@pytest.mark.parametrize(
+    "name, encoded",
+    [
+        ("gpu#west", "gpu%23west"),
+        ("gpu?zone=west", "gpu%3Fzone%3Dwest"),
+        ("gpu west", "gpu%20west"),
+        ("gpu+west", "gpu%2Bwest"),
+        ("équipe", "%C3%A9quipe"),
+    ],
+)
+@pytest.mark.parametrize("url_type", ["ui", "api"])
+def test_url_for_encodes_work_pool_names(
+    name: str, encoded: str, url_type: Literal["ui", "api"]
+):
+    pool = WorkPool(name=name, type="process")
+    with temporary_settings(
+        {PREFECT_UI_URL: MOCK_PREFECT_UI_URL, PREFECT_API_URL: MOCK_PREFECT_API_URL}
+    ):
+        result = url_for(pool, url_type=url_type)
+    base = MOCK_PREFECT_UI_URL if url_type == "ui" else MOCK_PREFECT_API_URL
+    path = "work-pools/work-pool" if url_type == "ui" else "work_pools"
+    assert result == f"{base}/{path}/{encoded}"
+
+
+def test_url_for_encodes_worker_pool_name():
+    with temporary_settings({PREFECT_UI_URL: MOCK_PREFECT_UI_URL}):
+        result = url_for(
+            "worker",
+            obj_id="123e4567-e89b-12d3-a456-426614174000",
+            work_pool_name="gpu#west?blue",
+        )
+    assert result == (
+        f"{MOCK_PREFECT_UI_URL}/work-pools/work-pool/gpu%23west%3Fblue/worker/"
+        "123e4567-e89b-12d3-a456-426614174000"
+    )
